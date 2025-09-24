@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 // 타입 정의
 type Cell = number | null;
@@ -6,14 +6,16 @@ export type Map2048 = Cell[][];
 type Direction = 'up' | 'left' | 'right' | 'down';
 type RotateDegree = 0 | 90 | 180 | 270;
 type DirectionDegreeMap = Record<Direction, RotateDegree>;
-type MoveResult = { result: Map2048; isMoved: boolean };
+type MoveResult = { result: Map2048; isMoved: boolean, gained: number };
 
-// 게임 로직을 위한 헬퍼 함수  (변경 없음)
+// 게임판 유효 검사, 모든 행의 길이가 동일한지 확인
 const validateMapIsNByM = (map: Map2048) => {
   const firstColumnCount = map[0].length;
   return map.every((row) => row.length === firstColumnCount);
 };
 
+// 어떤 방향이든 회전을 하여 left move만 구현하도록
+// up -> 90도 반시계, right -> 180도, down -> 270도 반시계 회전
 const rotateMapCounterClockwise = (
   map: Map2048,
   degree: RotateDegree
@@ -48,20 +50,21 @@ const rotateMapCounterClockwise = (
   }
 };
 
-const moveRowLeft = (row: Cell[]): { result: Cell[]; isMoved: boolean } => {
+// left move 구현, 병합 및 이동
+const moveRowLeft = (row: Cell[]): { result: Cell[]; isMoved: boolean; gained: number } => {
   const reduced = row.reduce(
-    (acc: { lastCell: Cell; result: Cell[] }, cell) => {
+    (acc: { lastCell: Cell; result: Cell[]; gained: number }, cell) => {
       if (cell === null) {
         return acc;
       } else if (acc.lastCell === null) {
-        return { ...acc, lastCell: cell };
+        return { ...acc, lastCell: cell, gcained: acc.gained };
       } else if (acc.lastCell === cell) {
-        return { result: [...acc.result, cell * 2], lastCell: null };
+        return { result: [...acc.result, cell * 2], lastCell: null, gained: cell };
       } else {
-        return { result: [...acc.result, acc.lastCell], lastCell: cell };
+        return { result: [...acc.result, acc.lastCell], lastCell: cell, gained: acc.gained };
       }
     },
-    { lastCell: null, result: [] }
+    { lastCell: null, result: [], gained: 0 }
   );
   const result = [...reduced.result, reduced.lastCell];
   const resultRow = Array.from(
@@ -71,6 +74,7 @@ const moveRowLeft = (row: Cell[]): { result: Cell[]; isMoved: boolean } => {
   return {
     result: resultRow,
     isMoved: row.some((cell, i) => cell !== resultRow[i]),
+    gained: reduced.gained,
   };
 };
 
@@ -78,7 +82,8 @@ const moveLeft = (map: Map2048): MoveResult => {
   const movedRows = map.map(moveRowLeft);
   const result = movedRows.map((movedRow) => movedRow.result);
   const isMoved = movedRows.some((movedRow) => movedRow.isMoved);
-  return { result, isMoved };
+  const gained = movedRows.reduce((acc, movedRow) => acc + movedRow.gained, 0);
+  return { result, isMoved, gained };
 };
 
 const rotateDegreeMap: DirectionDegreeMap = {
@@ -96,21 +101,20 @@ const revertDegreeMap: DirectionDegreeMap = {
 
 export const moveMapIn2048Rule = (
   map: Map2048,
-  direction: Direction
+  direction: Direction,
 ): MoveResult => {
   if (!validateMapIsNByM(map)) throw new Error('Map is not N by M');
   const rotatedMap = rotateMapCounterClockwise(map, rotateDegreeMap[direction]);
-  const { result, isMoved } = moveLeft(rotatedMap);
+  const { result, isMoved, gained } = moveLeft(rotatedMap);
   return {
     result: rotateMapCounterClockwise(result, revertDegreeMap[direction]),
     isMoved,
+    gained,
   };
 };
 
-/* =========================
-   (새로 추가) UI 전용 컴포넌트
-========================= */
-const CellView: React.FC<{ value: Cell }> = ({ value }) => {
+// Cell 컴포넌트
+const CellView = ({ value }: { value: Cell }) => {
   const colors: Record<number, string> = {
     2: '#eee4da',
     4: '#ede0c8',
@@ -148,10 +152,7 @@ const CellView: React.FC<{ value: Cell }> = ({ value }) => {
 };
 
 // board
-const BoardGrid: React.FC<{ board: Map2048; size: number }> = ({
-  board,
-  size,
-}) => {
+const BoardGrid = ({ board, size }: { board: Map2048; size: number }) => {
   return (
     <div
       style={{
@@ -173,56 +174,67 @@ const BoardGrid: React.FC<{ board: Map2048; size: number }> = ({
 };
 
 // HUD 컴포넌트, 점수판과 버튼
-const HUD: React.FC<{
+const HUD = ({
+  score,
+  historyLen,
+  onNew,
+  onUndo,
+}: {
   score: number;
   historyLen: number;
   onNew: () => void;
   onUndo: () => void;
-}> = ({ score, historyLen, onNew, onUndo }) => (
-  <div
-    style={{
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginTop: '16px',
-    }}
-  >
-    <div style={{ fontSize: '20px' }}>점수: {score}</div>
-    <div>
-      <button
-        onClick={onNew}
-        style={{
-          marginRight: '8px',
-          fontSize: '16px',
-          width: '120px',
-          height: '40px',
-        }}
-      >
-        New Game
-      </button>
-      <button
-        onClick={onUndo}
-        disabled={historyLen === 0}
-        style={{
-          fontSize: '16px',
-          width: '80px',
-          height: '40px',
-          opacity: historyLen === 0 ? 0.5 : 1,
-        }}
-      >
-        Undo
-      </button>
+}) => {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: '16px',
+      }}
+    >
+      <div style={{ fontSize: '20px' }}>점수: {score}</div>
+      <div>
+        <button
+          onClick={onNew}
+          style={{
+            marginRight: '8px',
+            fontSize: '16px',
+            width: '120px',
+            height: '40px',
+          }}
+        >
+          New Game
+        </button>
+        <button
+          onClick={onUndo}
+          disabled={historyLen === 0}
+          style={{
+            fontSize: '16px',
+            width: '80px',
+            height: '40px',
+            opacity: historyLen === 0 ? 0.5 : 1,
+          }}
+        >
+          Undo
+        </button>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // Game over 화면
-const GameOverOverlay: React.FC<{
+const GameOverOverlay = ({
+  show,
+  onNew,
+  board,
+}: {
   show: boolean;
   onNew: () => void;
   board: Map2048;
-}> = ({ show, onNew, board }) =>
-  !show ? null : (
+}) => {
+  return (
     <div
       style={{
         position: 'absolute',
@@ -234,6 +246,7 @@ const GameOverOverlay: React.FC<{
         alignItems: 'center',
         zIndex: 10,
         borderRadius: '10px',
+        visibility: show ? 'visible' : 'hidden',
       }}
     >
       <h2>
@@ -253,11 +266,10 @@ const GameOverOverlay: React.FC<{
       </button>
     </div>
   );
+};
 
-/* =========================
-   (그대로 유지) App 로직 + 상태
-========================= */
-const App: React.FC = () => {
+// 메인 컴포넌트
+const App = () => {
   const size = 4;
 
   // 초기 보드/점수
@@ -265,17 +277,13 @@ const App: React.FC = () => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('board-2048');
       if (saved) {
-        try {
           return JSON.parse(saved) as Map2048;
-        } catch {
-          /* ignore */
-        }
       }
     }
     const empty = Array.from({ length: size }, () =>
       Array.from({ length: size }, () => null as Cell)
     );
-    return addRandomTile(addRandomTile(empty));
+    return addRandomTile(empty);
   });
 
   const [score, setScore] = useState<number>(() => {
@@ -294,13 +302,13 @@ const App: React.FC = () => {
   );
   const [gameOver, setGameOver] = useState<boolean>(false);
 
-  // 로컬스토리지 반영
+  // local storage에 보드/점수 저장, 새로고침 해도 화면 유지 가능
   useEffect(() => {
     localStorage.setItem('board-2048', JSON.stringify(board));
     localStorage.setItem('score-2048', score.toString());
   }, [board, score]);
 
-  // 방향키 이벤트
+  // 방향키 event
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (gameOver) return;
@@ -309,16 +317,18 @@ const App: React.FC = () => {
       else if (e.key === 'ArrowDown') dir = 'down';
       else if (e.key === 'ArrowLeft') dir = 'left';
       else if (e.key === 'ArrowRight') dir = 'right';
+      let point: number = 0;
       if (dir) {
         e.preventDefault();
-        move(dir);
+        point = move(dir);
+        setScore((s) => s + point);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [board, score, gameOver]);
 
-  // ---- (그대로 유지) 보조 로직 ----
+  // 새로운 게임에서 2개의 타일을 무작위로 추가
   function addRandomTile(map: Map2048): Map2048 {
     const emptyCells: { row: number; col: number }[] = [];
     map.forEach((row, i) => {
@@ -326,23 +336,12 @@ const App: React.FC = () => {
         if (cell === null) emptyCells.push({ row: i, col: j });
       });
     });
-    if (emptyCells.length === 0) return map;
     const { row, col } =
       emptyCells[Math.floor(Math.random() * emptyCells.length)];
     const value = Math.random() < 0.1 ? 4 : 2;
     const newMap = map.map((r) => r.slice());
     newMap[row][col] = value;
     return newMap;
-  }
-
-  function sumBoard(map: Map2048): number {
-    return map.reduce(
-      (sum, row) =>
-        row !== null && row !== undefined
-          ? sum + row.reduce((rSum, cell) => rSum + (cell ?? 0), 0)
-          : sum,
-      0
-    );
   }
 
   function canMove(map: Map2048): boolean {
@@ -357,12 +356,11 @@ const App: React.FC = () => {
     return false;
   }
 
-  // ---- (그대로 유지) 핵심 이동 로직 ----
-  function move(direction: Direction) {
-    const { result: newBoard, isMoved } = moveMapIn2048Rule(board, direction);
-    if (!isMoved) return;
-    const gained = sumBoard(newBoard) - sumBoard(board); // 병합 증가분
-    setHistory((prev) => [...prev, { board, score }]);
+  // board 이동 logic
+  function move(direction: Direction) : number {
+    const { result: newBoard, isMoved, gained } = moveMapIn2048Rule(board, direction);
+    if (!isMoved) return 0; // 이동 불가
+    setHistory([{ board, score }]); // undo는 연속으로 불가능
     const boardWithNewTile = addRandomTile(newBoard);
     setBoard(boardWithNewTile);
     setScore((s) => s + gained); // 함수형 업데이트(안전)
@@ -372,6 +370,7 @@ const App: React.FC = () => {
     ) {
       setGameOver(true);
     }
+    return gained;
   }
 
   const newGame = () => {
@@ -395,9 +394,8 @@ const App: React.FC = () => {
     });
   };
 
-  /* =========================
-     반환(JSX) — 화면을 구성하는 컴포넌트들
-  ========================= */
+  // 반환(JSX) — 화면을 구성하는 컴포넌트들
+
   return (
     <div
       style={{
