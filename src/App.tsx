@@ -6,7 +6,7 @@ export type Map2048 = Cell[][];
 type Direction = 'up' | 'left' | 'right' | 'down';
 type RotateDegree = 0 | 90 | 180 | 270;
 type DirectionDegreeMap = Record<Direction, RotateDegree>;
-type MoveResult = { result: Map2048; isMoved: boolean, gained: number };
+type MoveResult = { result: Map2048; isMoved: boolean; gained: number };
 
 // 게임판 유효 검사, 모든 행의 길이가 동일한지 확인
 const validateMapIsNByM = (map: Map2048) => {
@@ -51,7 +51,9 @@ const rotateMapCounterClockwise = (
 };
 
 // left move 구현, 병합 및 이동
-const moveRowLeft = (row: Cell[]): { result: Cell[]; isMoved: boolean; gained: number } => {
+const moveRowLeft = (
+  row: Cell[]
+): { result: Cell[]; isMoved: boolean; gained: number } => {
   const reduced = row.reduce(
     (acc: { lastCell: Cell; result: Cell[]; gained: number }, cell) => {
       if (cell === null) {
@@ -59,9 +61,17 @@ const moveRowLeft = (row: Cell[]): { result: Cell[]; isMoved: boolean; gained: n
       } else if (acc.lastCell === null) {
         return { ...acc, lastCell: cell, gcained: acc.gained };
       } else if (acc.lastCell === cell) {
-        return { result: [...acc.result, cell * 2], lastCell: null, gained: cell };
+        return {
+          result: [...acc.result, cell * 2],
+          lastCell: null,
+          gained: cell,
+        };
       } else {
-        return { result: [...acc.result, acc.lastCell], lastCell: cell, gained: acc.gained };
+        return {
+          result: [...acc.result, acc.lastCell],
+          lastCell: cell,
+          gained: acc.gained,
+        };
       }
     },
     { lastCell: null, result: [], gained: 0 }
@@ -101,7 +111,7 @@ const revertDegreeMap: DirectionDegreeMap = {
 
 export const moveMapIn2048Rule = (
   map: Map2048,
-  direction: Direction,
+  direction: Direction
 ): MoveResult => {
   if (!validateMapIsNByM(map)) throw new Error('Map is not N by M');
   const rotatedMap = rotateMapCounterClockwise(map, rotateDegreeMap[direction]);
@@ -277,7 +287,7 @@ const App = () => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('board-2048');
       if (saved) {
-          return JSON.parse(saved) as Map2048;
+        return JSON.parse(saved) as Map2048;
       }
     }
     const empty = Array.from({ length: size }, () =>
@@ -357,10 +367,14 @@ const App = () => {
   }
 
   // board 이동 logic
-  function move(direction: Direction) : number {
-    const { result: newBoard, isMoved, gained } = moveMapIn2048Rule(board, direction);
+  function move(direction: Direction): number {
+    const {
+      result: newBoard,
+      isMoved,
+      gained,
+    } = moveMapIn2048Rule(board, direction);
     if (!isMoved) return 0; // 이동 불가
-    setHistory([{ board, score }]); // undo는 연속으로 불가능
+    setHistory((prev) => [...prev, { board, score }]); // undo는 연속으로 가능
     const boardWithNewTile = addRandomTile(newBoard);
     setBoard(boardWithNewTile);
     setScore((s) => s + gained); // 함수형 업데이트(안전)
