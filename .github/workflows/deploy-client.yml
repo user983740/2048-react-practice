@@ -1,6 +1,9 @@
 name: deploy-client
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -16,15 +19,6 @@ jobs:
         with:
           node-version: '20.11.1'
 
-      - name: Set environment variables
-        run: |
-          touch .env.local
-          echo "VITE_GOOGLE_CLIENT_ID=${{ secrets.VITE_GOOGLE_CLIENT_ID }}" >> .env.local
-
-      - name: Remove msw files
-        run: |
-          find ./public -name "mockServiceWorker.js" -delete
-
       - name: Build & Export
         run: |
           yarn install
@@ -36,5 +30,5 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ap-northeast-2
         run: |
-          aws s3 sync ./dist s3://internhasha-prod --delete
-          aws cloudfront create-invalidation --distribution-id E33POIFOFDK1OR --paths "/*"
+          aws s3 sync ./dist s3://waffle-seminar-2025-deploy-minseok-seo --delete
+          aws cloudfront create-invalidation --distribution-id E1GQFMJFAAH1OJ --paths "/*"\
