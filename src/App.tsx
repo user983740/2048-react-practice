@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 // 타입 정의
 type Cell = number | null;
@@ -59,7 +59,7 @@ const moveRowLeft = (
       if (cell === null) {
         return acc;
       } else if (acc.lastCell === null) {
-        return { ...acc, lastCell: cell, gcained: acc.gained };
+        return { ...acc, lastCell: cell, gained: acc.gained };
       } else if (acc.lastCell === cell) {
         return {
           result: [...acc.result, cell * 2],
@@ -318,6 +318,30 @@ const App = () => {
     localStorage.setItem('score-2048', score.toString());
   }, [board, score]);
 
+  // board 이동 logic
+  const move = useCallback(
+    (direction: Direction): number => {
+      const {
+        result: newBoard,
+        isMoved,
+        gained,
+      } = moveMapIn2048Rule(board, direction);
+      if (!isMoved) return 0;
+      setHistory((prev) => [...prev, { board, score }]);
+      const boardWithNewTile = addRandomTile(newBoard);
+      setBoard(boardWithNewTile);
+      setScore((s) => s + gained);
+      if (
+        boardWithNewTile.some((row) => row.some((c) => c === 128)) ||
+        !canMove(boardWithNewTile)
+      ) {
+        setGameOver(true);
+      }
+      return gained;
+    },
+    [board, score]
+  );
+
   // 방향키 event
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -327,16 +351,14 @@ const App = () => {
       else if (e.key === 'ArrowDown') dir = 'down';
       else if (e.key === 'ArrowLeft') dir = 'left';
       else if (e.key === 'ArrowRight') dir = 'right';
-      let point: number = 0;
       if (dir) {
         e.preventDefault();
-        point = move(dir);
-        setScore((s) => s + point);
+        move(dir);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [board, score, gameOver]);
+  }, [gameOver, move]);
 
   // 새로운 게임에서 2개의 타일을 무작위로 추가
   function addRandomTile(map: Map2048): Map2048 {
@@ -364,27 +386,6 @@ const App = () => {
       }
     }
     return false;
-  }
-
-  // board 이동 logic
-  function move(direction: Direction): number {
-    const {
-      result: newBoard,
-      isMoved,
-      gained,
-    } = moveMapIn2048Rule(board, direction);
-    if (!isMoved) return 0; // 이동 불가
-    setHistory((prev) => [...prev, { board, score }]); // undo는 연속으로 가능
-    const boardWithNewTile = addRandomTile(newBoard);
-    setBoard(boardWithNewTile);
-    setScore((s) => s + gained); // 함수형 업데이트(안전)
-    if (
-      boardWithNewTile.some((row) => row.some((c) => c === 128)) ||
-      !canMove(boardWithNewTile)
-    ) {
-      setGameOver(true);
-    }
-    return gained;
   }
 
   const newGame = () => {
