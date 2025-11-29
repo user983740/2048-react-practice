@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 // 타입 정의
 type Cell = number | null;
-export type Map2048 = Cell[][];
+type Map2048 = Cell[][];
 type Direction = 'up' | 'left' | 'right' | 'down';
 type RotateDegree = 0 | 90 | 180 | 270;
 type DirectionDegreeMap = Record<Direction, RotateDegree>;
@@ -109,10 +109,7 @@ const revertDegreeMap: DirectionDegreeMap = {
   left: 0,
 };
 
-export const moveMapIn2048Rule = (
-  map: Map2048,
-  direction: Direction
-): MoveResult => {
+const moveMapIn2048Rule = (map: Map2048, direction: Direction): MoveResult => {
   if (!validateMapIsNByM(map)) throw new Error('Map is not N by M');
   const rotatedMap = rotateMapCounterClockwise(map, rotateDegreeMap[direction]);
   const { result, isMoved, gained } = moveLeft(rotatedMap);
